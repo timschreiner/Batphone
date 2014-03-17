@@ -12,11 +12,18 @@ public class CompressedCodec implements Codec {
         this.wrappedCompressor = wrappedCompressor;
     }
 
+    @Override
     public byte[] encode(Object toEncode) throws IOException {
         return wrappedCompressor.compress(wrappedCodec.encode(toEncode));
     }
 
+    @Override
     public <T> T decode(byte[] toDecode, Class<T> decodeAs) throws IOException {
         return wrappedCodec.decode(wrappedCompressor.decompress(toDecode), decodeAs);
+    }
+
+    @Override
+    public String toString() {
+        return wrappedCodec.toString();
     }
 }

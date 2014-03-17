@@ -4,7 +4,9 @@ import com.google.common.base.Optional;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.timpo.batphone.handlers.EventHandler;
 import com.timpo.batphone.handlers.RequestHandler;
+import com.timpo.batphone.messages.Event;
 import com.timpo.batphone.messages.Message;
+import com.timpo.batphone.messages.Request;
 import com.timpo.batphone.messengers.Messenger;
 import com.timpo.batphone.other.Utils;
 import java.util.Map;
@@ -29,17 +31,17 @@ public abstract class Service {
         //wire up this service to the messenger
         messenger.onEvent(new EventHandler() {
             @Override
-            public void handle(Message event, String channel) {
-                handleEvent(event, channel);
+            public void handle(Event event, String topic) {
+                handleEvent(event, topic);
             }
-        }, cfg.eventChannels);
+        }, cfg.eventTopics);
         
         messenger.onRequest(new RequestHandler() {
             @Override
-            public Optional<Map<String, Object>> handle(Message request, String channel) {
-                return handleRequest(request, channel);
+            public Optional<Map<String, Object>> handle(Request request, String topic) {
+                return handleRequest(request, topic);
             }
-        }, cfg.requestChannels);
+        }, cfg.requestTopics);
 
         //TODO: wire up onRequest for handling commands sent to this service, like init / pause / continue / shutdown
 
@@ -111,8 +113,8 @@ public abstract class Service {
      *
      * @param event
      */
-    public void handleEvent(Message event, String channel) {
-        LOG.warn("handleEvent called without being overriden: channel={}", channel);
+    public void handleEvent(Message event, String topic) {
+        LOG.warn("handleEvent called without being overriden: topic={}", topic);
     }
 
     /**
@@ -124,10 +126,10 @@ public abstract class Service {
      * merged into the response for you
      *
      * @param request
-     * @param channel
+     * @param topic
      * @return Optional data to be merged into the response data
      */
-    public Optional<Map<String, Object>> handleRequest(Message request, String channel) {
+    public Optional<Map<String, Object>> handleRequest(Message request, String topic) {
         LOG.warn("handleRequest called without being overriden");
         return Optional.absent();
     }
@@ -140,17 +142,17 @@ public abstract class Service {
      * @param pipe
      * @return
      */
-    protected ListenableFuture<Message> request(Map<String, Object> data, String... pipe) throws Exception {
+    protected ListenableFuture<Request> request(Map<String, Object> data, String... pipe) throws Exception {
         return messenger.request(data, pipe);
     }
 
     /**
      * Used by the service to notify other services of some Event
      *
-     * @param channel
+     * @param topic
      * @param data
      */
-    public void notify(String channel, Object data) throws Exception {
-        messenger.notify(data, channel);
+    public void notify(String topic, Object data) throws Exception {
+        messenger.notify(data, topic);
     }
 }

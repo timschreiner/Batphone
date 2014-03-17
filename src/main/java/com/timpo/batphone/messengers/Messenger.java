@@ -3,7 +3,7 @@ package com.timpo.batphone.messengers;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.timpo.batphone.handlers.EventHandler;
 import com.timpo.batphone.handlers.RequestHandler;
-import com.timpo.batphone.messages.Message;
+import com.timpo.batphone.messages.Request;
 
 /**
  * Manages the creation of messages, compression, encoding, transmission and the
@@ -19,27 +19,27 @@ public interface Messenger {
 
     /**
      * @return the name of this type of service. service instances in the same
-     * serice group have their messages load-balanced between them
+     * service group have their messages load-balanced between them
      */
     public String getServiceGroup();
 
     /**
-     * Bind a handler to 1 or more request channels
+     * Bind a handler to 1 or more request topics
      *
      * @param handler
-     * @param channels
+     * @param topics
      * @throws Exception
      */
-    public void onRequest(RequestHandler handler, String... channels);
+    public void onRequest(RequestHandler handler, String... topics);
 
     /**
-     * Bind a handler to 1 or more event channels
+     * Bind a handler to 1 or more event topics
      *
      * @param handler
-     * @param channels
+     * @param topics
      * @throws Exception
      */
-    public void onEvent(EventHandler handler, String... channels);
+    public void onEvent(EventHandler handler, String... topics);
 
     /**
      * Send any object as a request to 1 or more destination services.
@@ -56,18 +56,18 @@ public interface Messenger {
      * @throws Exception if something has broken with the underlying transports
      * that back this implementation
      */
-    public ListenableFuture<Message> request(Object body, String... pipeline) throws Exception;
+    public ListenableFuture<Request> request(Object body, String... pipeline) throws Exception;
 
     /**
      * Notify subscribed services about an event occurring.
      *
      * @param body the data for the event
-     * @param channels 1 or more channels that describe or contain events like
+     * @param topics 1 or more topics that describe or contain events like
      * this
      * @throws Exception if something has broken with the underlying transports
      * that back this implementation
      */
-    public void notify(Object body, String... channels) throws Exception;
+    public void notify(Object body, String... topics) throws Exception;
 
     /**
      * This messenger should begin pulling in and handling messages.

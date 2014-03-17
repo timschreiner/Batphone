@@ -3,23 +3,30 @@ package com.timpo.batphone.transports.rabbit;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.timpo.batphone.other.Utils;
-import org.apache.commons.pool.BasePoolableObjectFactory;
-import org.apache.commons.pool.impl.GenericObjectPool;
+import org.apache.commons.pool2.BasePooledObjectFactory;
+import org.apache.commons.pool2.PooledObject;
+import org.apache.commons.pool2.impl.DefaultPooledObject;
+import org.apache.commons.pool2.impl.GenericObjectPool;
+
 import org.slf4j.Logger;
 
 public class ChannelPool extends GenericObjectPool<Channel> {
 
     private static final Logger LOG = Utils.logFor(ChannelPool.class);
 
-    public ChannelPool(Connection conn) {
+    public ChannelPool(Connection conn, int maxChannels) {
         super(new ChannelPoolFactory(conn));
 
         setTestWhileIdle(true);
         setMinEvictableIdleTimeMillis(1000 * 10);
-        setMaxActive(16);
+        setMaxTotal(maxChannels);
     }
 
-    static class ChannelPoolFactory extends BasePoolableObjectFactory<Channel> {
+    public ChannelPool(Connection conn) {
+        this(conn, 16);
+    }
+
+    static class ChannelPoolFactory extends BasePooledObjectFactory<Channel> {
 
         private final Connection conn;
 
@@ -28,21 +35,26 @@ public class ChannelPool extends GenericObjectPool<Channel> {
         }
 
         @Override
-        public Channel makeObject() throws Exception {
-            LOG.debug("makeObject");
+        public Channel create() throws Exception {
+            LOG.debug("create");
             return conn.createChannel();
         }
 
         @Override
-        public void destroyObject(Channel chan) throws Exception {
-            LOG.debug("destroyObject");
-            chan.close();
+        public PooledObject<Channel> wrap(Channel chan) {
+            return new DefaultPooledObject<>(chan);
         }
 
         @Override
-        public boolean validateObject(Channel chan) {
+        public boolean validateObject(PooledObject<Channel> chan) {
             LOG.debug("validateObject");
-            return chan.isOpen();
+            return chan.getObject().isOpen();
+        }
+
+        @Override
+        public void destroyObject(PooledObject<Channel> chan) throws Exception {
+            LOG.debug("destroyObject");
+            chan.getObject().close();
         }
     }
 }

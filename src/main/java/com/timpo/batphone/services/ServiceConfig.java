@@ -2,7 +2,7 @@ package com.timpo.batphone.services;
 
 public class ServiceConfig {
 
-    public String[] eventChannels;
-    public String[] requestChannels;
+    public String[] eventTopics;
+    public String[] requestTopics;
     public int numRunThreads;
 }

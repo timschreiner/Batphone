@@ -43,4 +43,9 @@ public class InstrumentedCodec implements Codec {
         }
         return decoded;
     }
+
+    @Override
+    public String toString() {
+        return wrappedCodec.toString();
+    }
 }

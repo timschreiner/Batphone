@@ -2,12 +2,11 @@ package com.timpo.batphone.other;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Charsets;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.google.common.base.Optional;
 import com.google.common.collect.Maps;
 import com.google.common.io.BaseEncoding;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
@@ -18,23 +17,28 @@ import org.slf4j.LoggerFactory;
 
 public class Utils {
 
+    public static long timestamp() {
+        return System.nanoTime() / 1000L; //current time in microseconds
+    }
+    public static String id = "";
     /**
      * Used to convert objects to and from Json
      */
     public static final ObjectMapper JSON = new ObjectMapper();
 
     static {
+        //this ensures that we can decode arbitrary json to some class without 
+        //it breaking when the json contains fields that the class does not
         JSON.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+        //this ensures that fields with empty arrays aren't included in the 
+        //message, which saves space
+        JSON.configure(SerializationFeature.WRITE_EMPTY_JSON_ARRAYS, false);
     }
     /**
      * Used for generating random numbers
      */
     public static final Random RAND = new Random();
-    /**
-     * The Charset encoding used for all byte[] in this project
-     */
-    public static final Charset ENCODING = Charsets.UTF_8;
-    //
     //
     private static final String REQ_ID_PREFIX = "" + RAND.nextInt(10) + RAND.nextInt(10) + "-";
     private static final AtomicLong requestIDCounter = new AtomicLong(0);
@@ -107,7 +111,7 @@ public class Utils {
      * @return the string's byte value
      */
     public static byte[] asBytes(String string) {
-        return string.getBytes(ENCODING);
+        return string.getBytes(Constants.ENCODING);
     }
 
     /**
@@ -117,7 +121,7 @@ public class Utils {
      * @return the bytes' string value
      */
     public static String asString(byte[] bytes) {
-        return new String(bytes, ENCODING);
+        return new String(bytes, Constants.ENCODING);
     }
 
     /**
@@ -153,13 +157,13 @@ public class Utils {
     }
 
     /**
-     * Determines if a channel contains wildcard characters
+     * Determines if a topic contains wildcard characters
      *
-     * @param channel the channel to check
-     * @return true if the channel contains wildcard characters
+     * @param topic the topic to check
+     * @return true if the topic contains wildcard characters
      */
-    public static boolean isWildcard(String channel) {
-        return channel.matches(".*[^a-zA-Z0-9-_.].*");
+    public static boolean isWildcard(String topic) {
+        return topic.matches(".*[^a-zA-Z0-9-_.].*");
     }
 
     /**
@@ -192,7 +196,7 @@ public class Utils {
     public static long toMillis(long duration, TimeUnit timeUnit) {
         return TimeUnit.MILLISECONDS.convert(duration, timeUnit);
     }
-    
+
     /*
      * Get a logging instance
      */

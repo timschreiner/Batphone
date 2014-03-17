@@ -1,9 +1,13 @@
 package com.timpo.batphone.transports.redis;
 
+import com.timpo.batphone.holders.RoundRobinHolder;
 import com.google.common.base.Optional;
+import com.timpo.batphone.codecs.Codec;
+import com.timpo.batphone.holders.HolderFactory;
+import com.timpo.batphone.messages.Request;
 import com.timpo.batphone.other.Constants;
 import com.timpo.batphone.other.Utils;
-import com.timpo.batphone.transports.AbstractTransport;
+import com.timpo.batphone.transports.polling.PollingTransport;
 import com.timpo.batphone.transports.BinaryMessage;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,38 +15,32 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
-import org.apache.commons.pool.impl.GenericObjectPool;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
 import org.slf4j.Logger;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
-public class RedisDirectTransport extends AbstractTransport {
+public class RedisDirectTransport extends PollingTransport<Request> {
 
     private static final Logger LOG = Utils.logFor(RedisDirectTransport.class);
     //
     private final RoundRobinHolder<JedisPool> holder;
 
-    public RedisDirectTransport(int numThreads, ExecutorService es, RedisAddress shard) {
-        super(numThreads, es);
-        holder = new RoundRobinHolder<>();
-        holder.add(new JedisPool(shard.getHost(), shard.getPort()));
-    }
-
-    public RedisDirectTransport(int numThreads, ExecutorService es, GenericObjectPool.Config poolConfig, List<RedisAddress> shards) {
-        super(numThreads, es);
-        holder = new RoundRobinHolder<>();
+    public RedisDirectTransport(Codec codec, int numThreads, ExecutorService es, GenericObjectPoolConfig poolConfig, List<RedisAddress> shards) {
+        super(codec, Request.class, numThreads, es);
+        holder = HolderFactory.makeRoundRobinHolder();
         for (RedisAddress shard : shards) {
             holder.add(new JedisPool(poolConfig, shard.getHost(), shard.getPort()));
         }
     }
 
-    public RedisDirectTransport(int numThreads, ExecutorService es, RoundRobinHolder<JedisPool> holder) {
-        super(numThreads, es);
+    public RedisDirectTransport(Codec codec, int numThreads, ExecutorService es, RoundRobinHolder<JedisPool> holder) {
+        super(codec, Request.class, numThreads, es);
         this.holder = holder;
     }
 
     @Override
-    protected List<? extends MessageConsumer> makeConsumers(Set<String> listenFor, int numThreads) {
+    protected List<? extends MessagePoller> makePollers(Set<String> listenFor, int numThreads) {
         List<RedisMessageConsumer> list = new ArrayList<>();
 
         for (int i = 0; i < numThreads; i++) {
@@ -55,11 +53,11 @@ public class RedisDirectTransport extends AbstractTransport {
     @Override
     public void send(BinaryMessage message) throws Exception {
         LOG.debug("send: {}", message);
-
         JedisPool pool = holder.next();
         Jedis client = pool.getResource();
         try {
             byte[] key = Utils.asBytes(message.getKey());
+
             client.lpush(key, message.getPayload());
 
         } finally {
@@ -76,33 +74,37 @@ public class RedisDirectTransport extends AbstractTransport {
                 JedisPool pool = holder.next();
                 holder.remove(pool);
                 pool.destroy();
-                
+
             } catch (NoSuchElementException ex) {
                 break;
             }
         }
     }
 
-    private class RedisMessageConsumer extends MessageConsumer {
+    private class RedisMessageConsumer extends MessagePoller {
 
-        private byte[][] byteKeys;
-        private int blockingTimeout;
+        private final byte[][] byteKeys;
+        private final int blockingTimeout;
+        private final JedisPool pool;
 
-        public RedisMessageConsumer(Set<String> channels) {
-            byteKeys = new byte[channels.size()][];
+        public RedisMessageConsumer(Set<String> topics) {
+            byteKeys = new byte[topics.size()][];
             int i = 0;
-            for (String s : channels) {
+            for (String s : topics) {
                 byteKeys[i++] = Utils.asBytes(s);
             }
 
             blockingTimeout = (int) TimeUnit.SECONDS.convert(
                     Constants.BLOCKING_TIMEOUT, TimeUnit.MILLISECONDS);
+
+            //each consumer gets a pool to avoid the issue where multiple 
+            //consumers are using the same pool while some pools are dormant
+            pool = holder.next();
         }
 
         @Override
         protected Optional<BinaryMessage> nextMessage() {
             //TODO: is there a performance benefit to not using the pool inside the loop?
-            JedisPool pool = holder.next();
             Jedis client = pool.getResource();
             try {
                 List<byte[]> response = client.brpop(blockingTimeout, byteKeys);

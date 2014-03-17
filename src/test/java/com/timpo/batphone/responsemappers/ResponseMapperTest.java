@@ -6,6 +6,7 @@ package com.timpo.batphone.responsemappers;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.timpo.batphone.messages.Message;
+import com.timpo.batphone.messages.Request;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -17,7 +18,7 @@ import org.junit.Test;
 
 public class ResponseMapperTest {
 
-    private ResponseMapper<Message> responseMapper;
+    private ResponseMapper<Request> responseMapper;
     private ExecutorService es;
 
     public ResponseMapperTest() {
@@ -31,17 +32,17 @@ public class ResponseMapperTest {
 
     @Test
     public void testResolveResponse() throws Exception {
-        
+
         Map<String, Object> expectedData = new HashMap<>();
         expectedData.put("test", "expected");
-        
+
         String requestID = "simple-request-id";
 
-        Message expectedResponse = new Message();
+        Request expectedResponse = new Request();
         expectedResponse.setData(expectedData);
         expectedResponse.setRequestID(requestID);
 
-        ListenableFuture<Message> future = responseMapper.makeFuture(requestID);
+        ListenableFuture<Request> future = responseMapper.makeFuture(requestID);
 
         responseMapper.resolveResponse(expectedResponse);
 

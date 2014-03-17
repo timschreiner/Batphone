@@ -15,20 +15,19 @@ public class CodecBuilder {
             throw new IllegalArgumentException("codec cannot be null");
         }
 
-        if (instrumentCodec) {
-            codec = new InstrumentedCodec(codec);
-        }
-
         if (compressor != null) {
             if (instrumentCompressor) {
                 compressor = new InstrumentedCompressor(compressor);
             }
 
-            return new CompressedCodec(codec, compressor);
-            
-        } else {
-            return codec;
+            codec = new CompressedCodec(codec, compressor);
         }
+
+        if (instrumentCodec) {
+            codec = new InstrumentedCodec(codec);
+        }
+
+        return codec;
     }
 
     private CodecBuilder(Codec codec) {

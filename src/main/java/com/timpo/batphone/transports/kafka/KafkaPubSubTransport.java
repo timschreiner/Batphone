@@ -2,9 +2,11 @@ package com.timpo.batphone.transports.kafka;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
+import com.timpo.batphone.codecs.Codec;
+import com.timpo.batphone.messages.Message;
 import com.timpo.batphone.other.Constants;
 import com.timpo.batphone.other.Utils;
-import com.timpo.batphone.transports.AbstractTransport;
+import com.timpo.batphone.transports.polling.PollingTransport;
 import com.timpo.batphone.transports.BinaryMessage;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +26,7 @@ import kafka.message.MessageAndMetadata;
 import kafka.producer.KeyedMessage;
 import kafka.producer.ProducerConfig;
 
-public class KafkaPubSubTransport extends AbstractTransport {
+public class KafkaPubSubTransport<M extends Message> extends PollingTransport<M> {
 
     private static final Joiner topicJoiner = Joiner.on("|").skipNulls();
     private static final Joiner addressJoiner = Joiner.on(",").skipNulls();
@@ -32,22 +34,22 @@ public class KafkaPubSubTransport extends AbstractTransport {
     private final Producer<byte[], byte[]> producer;
     private final ConsumerConnector consumer;
 
-    public KafkaPubSubTransport(int numThreads, ExecutorService es, String serviceGroup, List<BrokerAddress> brokers, List<ZookeeperAddress> zookeepers) {
-        super(numThreads, es);
+    public KafkaPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, List<BrokerAddress> brokers, List<ZookeeperAddress> zookeepers) {
+        super(codec, decodeAs, numThreads, es);
 
         producer = makeProducer(defaultProducerProps(brokers));
         consumer = makeConsumer(defaultConsumerProps(zookeepers), serviceGroup);
     }
 
-    public KafkaPubSubTransport(int numThreads, ExecutorService es, String serviceGroup, Properties producerProps, Properties consumerProps) {
-        super(numThreads, es);
+    public KafkaPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, Properties producerProps, Properties consumerProps) {
+        super(codec, decodeAs, numThreads, es);
 
         producer = makeProducer(producerProps);
         consumer = makeConsumer(consumerProps, serviceGroup);
     }
 
     @Override
-    protected List<? extends MessageConsumer> makeConsumers(Set<String> listenFor, int numThreads) {
+    protected List<? extends MessagePoller> makePollers(Set<String> listenFor, int numThreads) {
         List<KafkaMessageConsumer> list = new ArrayList<>();
 
         String topics = topicJoiner.join(listenFor);
@@ -119,7 +121,7 @@ public class KafkaPubSubTransport extends AbstractTransport {
         consumer.shutdown();
     }
 
-    private class KafkaMessageConsumer extends MessageConsumer {
+    private class KafkaMessageConsumer extends MessagePoller {
 
         private final ConsumerIterator<byte[], byte[]> it;
 

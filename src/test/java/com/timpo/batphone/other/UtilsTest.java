@@ -59,19 +59,19 @@ public class UtilsTest {
 
     @Test
     public void testIsWildcard() {
-        String channel = "simple.channel";
+        String topic = "simple.topic";
         boolean expResult = false;
-        boolean result = Utils.isWildcard(channel);
+        boolean result = Utils.isWildcard(topic);
         assertEquals(expResult, result);
 
-        channel = "wildcard.*";
+        topic = "wildcard.*";
         expResult = true;
-        result = Utils.isWildcard(channel);
+        result = Utils.isWildcard(topic);
         assertEquals(expResult, result);
 
-        channel = "wildcard.thing-1";
+        topic = "wildcard.thing-1";
         expResult = false;
-        result = Utils.isWildcard(channel);
+        result = Utils.isWildcard(topic);
         assertEquals(expResult, result);
     }
 

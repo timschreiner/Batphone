@@ -1,4 +1,4 @@
-package com.timpo.batphone.transports;
+package com.timpo.batphone.transports.polling;
 
 import com.timpo.batphone.other.Utils;
 import java.util.concurrent.TimeUnit;

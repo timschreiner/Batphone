@@ -25,5 +25,14 @@ public interface Codec {
 	 * @return the hydrated object
 	 * @throws IOException
 	 */
-	public <T> T decode(byte[] toDecode, Class<T> decodeAs) throws IOException;
+	public <T> T decode(byte[] toDecode, Class<T> decodeAs) throws IOException;	
+
+	/*
+	add the topic to the above methods in case someone needs that
+
+	Anyone who wants to serialize / deserialize can use the topic name to serialize to something specific,
+	but it will still need to enc/dec arbitrary maps.
+
+	Find out what the performance difference is in terms of enc/dec/size to know if this is even that big of a deal.
+	*/
 }

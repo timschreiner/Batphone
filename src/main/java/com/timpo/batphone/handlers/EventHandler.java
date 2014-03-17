@@ -1,8 +1,8 @@
 package com.timpo.batphone.handlers;
 
-import com.timpo.batphone.messages.Message;
+import com.timpo.batphone.messages.Event;
 
 public interface EventHandler {
 
-    public void handle(Message event, String channel);
+    public void handle(Event event, String topic);
 }

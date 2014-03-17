@@ -3,7 +3,7 @@ package com.timpo.batphone.metrics;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
 import com.timpo.batphone.handlers.EventHandler;
-import com.timpo.batphone.messages.Message;
+import com.timpo.batphone.messages.Event;
 
 public class InstrumentedEventHandler implements EventHandler {
 
@@ -18,12 +18,12 @@ public class InstrumentedEventHandler implements EventHandler {
     }
 
     @Override
-    public void handle(Message event, String channel) {
+    public void handle(Event event, String topic) {
         meter.mark();
         
         Timer.Context handlerTimerContext = handlerTimer.time();
         try {
-            wrappedHandler.handle(event, channel);
+            wrappedHandler.handle(event, topic);
 
         } finally {
             handlerTimerContext.stop();

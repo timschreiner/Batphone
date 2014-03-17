@@ -9,8 +9,15 @@ public class BinaryMessage {
 
     @Override
     public String toString() {
-//		return "BinaryMessage{" + "key=" + key + ", payload=" + payload.length + " bytes" + '}';
-        return "BinaryMessage{" + "key=" + key + ", payload=" + Utils.asString(payload) + '}';
+        return "BinaryMessage{" + "key=" + key + ", payload=" + payloadAsString() + '}';
+    }
+
+    public String payloadAsString() {
+        if (payload.length < 2048) {
+            return Utils.asString(payload);
+        } else {
+            return payload.length + " bytes";
+        }
     }
 
     //<editor-fold defaultstate="collapsed" desc="generated-code">

@@ -4,7 +4,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Timer;
 import com.google.common.base.Optional;
 import com.timpo.batphone.handlers.RequestHandler;
-import com.timpo.batphone.messages.Message;
+import com.timpo.batphone.messages.Request;
 import java.util.Map;
 
 public class InstrumentedRequestHandler implements RequestHandler {
@@ -20,13 +20,13 @@ public class InstrumentedRequestHandler implements RequestHandler {
     }
 
     @Override
-    public Optional<Map<String, Object>> handle(Message request, String channel) {
+    public Optional<Map<String, Object>> handle(Request request, String topic) {
         //track that this handler was called
         handlerMeter.mark();
         
         Timer.Context handlerTimerContext = handlerTimer.time();
         try {
-            return wrappedHandler.handle(request, channel);
+            return wrappedHandler.handle(request, topic);
         } finally {
             handlerTimerContext.stop();
         }

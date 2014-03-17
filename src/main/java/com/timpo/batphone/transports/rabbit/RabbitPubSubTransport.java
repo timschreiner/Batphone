@@ -6,8 +6,10 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.GetResponse;
 import com.rabbitmq.client.MessageProperties;
+import com.timpo.batphone.codecs.Codec;
+import com.timpo.batphone.messages.Message;
 import com.timpo.batphone.other.Utils;
-import com.timpo.batphone.transports.AbstractTransport;
+import com.timpo.batphone.transports.polling.PollingTransport;
 import com.timpo.batphone.transports.BinaryMessage;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -17,7 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 
-public class RabbitPubSubTransport extends AbstractTransport {
+public class RabbitPubSubTransport<M extends Message> extends PollingTransport<M> {
 
     private static final Logger LOG = Utils.logFor(RabbitPubSubTransport.class);
     //
@@ -27,19 +29,19 @@ public class RabbitPubSubTransport extends AbstractTransport {
     private final Connection conn;
     private final ChannelPool channelPool;
 
-    public RabbitPubSubTransport(int numThreads, ExecutorService es, String serviceGroup, Connection conn) throws IOException {
-        super(numThreads, es);
+    public RabbitPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, Connection conn) throws IOException {
+        super(codec, decodeAs, numThreads, es);
 
         this.conn = conn;
         this.serviceGroup = serviceGroup;
 
-        this.channelPool = new ChannelPool(conn);
+        this.channelPool = new ChannelPool(conn, numThreads);
 
         init();
     }
 
-    public RabbitPubSubTransport(int numThreads, ExecutorService es, String serviceGroup, RabbitAddress address) throws IOException {
-        super(numThreads, es);
+    public RabbitPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, RabbitAddress address) throws IOException {
+        super(codec, decodeAs, numThreads, es);
 
         this.serviceGroup = serviceGroup;
 
@@ -54,7 +56,7 @@ public class RabbitPubSubTransport extends AbstractTransport {
     }
 
     @Override
-    protected List<? extends MessageConsumer> makeConsumers(Set<String> listenFor, int numThreads) {
+    protected List<? extends MessagePoller> makePollers(Set<String> listenFor, int numThreads) {
         List<RabbitMessageConsumer> list = new ArrayList<>();
 
         try {
@@ -135,7 +137,7 @@ public class RabbitPubSubTransport extends AbstractTransport {
         }
     }
 
-    private class RabbitMessageConsumer extends MessageConsumer {
+    private class RabbitMessageConsumer extends MessagePoller {
 
         private final String queue;
 

@@ -5,30 +5,32 @@ import com.timpo.batphone.handlers.Handler;
 /**
  * Responsible for sending and receiving BinaryMessages
  */
-public interface Transport {
+public interface Transport<M> {
 
     /**
-     * Indicates that messages sent to this channel should appear in the
-     * onMessage callback
+     * Indicates that messages sent to this topic should appear in the
+     * onMessage callback.  
+     * 
+     * Must be called before start in order to work.
      *
-     * @param channel
+     * @param topic
      */
-    public void listenFor(String channel);
+    public void listenFor(String topic);
 
     /**
      * Any messages received by this transport should be passed to this handler
      *
      * @param handler
      */
-    public void onMessage(Handler<BinaryMessage> handler);
+    public void onMessage(Handler<M> handler);
 
     /**
-     * Send a binary payload to the channel specifed by the message's key
+     * Send a binary payload to the topic specified by the message's key
      *
      * @param message
      * @throws Exception
      */
-    public void send(BinaryMessage message) throws Exception;
+    public void send(M message) throws Exception;
 
     /**
      * This transport should begin pulling in messages.
