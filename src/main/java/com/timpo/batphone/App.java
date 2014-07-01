@@ -16,8 +16,6 @@ import com.timpo.batphone.transports.Transport;
 import com.timpo.batphone.transports.rabbit.RabbitAddress;
 import com.timpo.batphone.transports.rabbit.RabbitPubSubTransport;
 import com.timpo.batphone.transports.redis.RedisDirectTransport;
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -129,17 +127,10 @@ public class App {
       pingMessenger.notify(event, pongService);
     }
 
-    Utils.sleep(1, TimeUnit.SECONDS);
+    Utils.sleep(3, TimeUnit.SECONDS);
     
     pingMessenger.shutdown();
     pongMessenger.shutdown();
     executorService.shutdownNow();
-
-//    ThreadInfo[] threads = ManagementFactory.getThreadMXBean()
-//            .dumpAllThreads(true, true);
-//
-//    for (final ThreadInfo info : threads) {
-//      System.out.println(info.getThreadName());
-//    }
   }
 }

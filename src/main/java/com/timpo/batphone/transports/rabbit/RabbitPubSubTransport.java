@@ -21,159 +21,160 @@ import org.slf4j.Logger;
 
 public class RabbitPubSubTransport<M extends Message> extends PollingTransport<M> {
 
-    private static final Logger LOG = Utils.logFor(RabbitPubSubTransport.class);
-    //
-    private static final String TOPIC_EXCHANGE = "svc_tpc";
-    //
-    private final String serviceGroup;
-    private final Connection conn;
-    private final ChannelPool channelPool;
+  private static final Logger LOG = Utils.logFor(RabbitPubSubTransport.class);
+  //
+  private static final String TOPIC_EXCHANGE = "svc_tpc";
+  //
+  private final String serviceGroup;
+  private final Connection conn;
+  private final ChannelPool channelPool;
 
-    public RabbitPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, Connection conn) throws IOException {
-        super(codec, decodeAs, numThreads, es);
+  public RabbitPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, Connection conn) throws IOException {
+    super(codec, decodeAs, numThreads, es);
 
-        this.conn = conn;
-        this.serviceGroup = serviceGroup;
+    this.conn = conn;
+    this.serviceGroup = serviceGroup;
 
-        this.channelPool = new ChannelPool(conn, numThreads);
+    this.channelPool = new ChannelPool(conn, numThreads);
 
-        init();
-    }
+    init();
+  }
 
-    public RabbitPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, RabbitAddress address) throws IOException {
-        super(codec, decodeAs, numThreads, es);
+  public RabbitPubSubTransport(Codec codec, Class<M> decodeAs, int numThreads, ExecutorService es, String serviceGroup, RabbitAddress address) throws IOException {
+    super(codec, decodeAs, numThreads, es);
 
-        this.serviceGroup = serviceGroup;
+    this.serviceGroup = serviceGroup;
 
-        ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost(address.getHost());
-        factory.setPort(address.getPort());
+    ConnectionFactory factory = new ConnectionFactory();
+    factory.setHost(address.getHost());
+    factory.setPort(address.getPort());
 
-        conn = factory.newConnection();
-        channelPool = new ChannelPool(conn);
+    conn = factory.newConnection();
+    channelPool = new ChannelPool(conn);
 
-        init();
-    }
+    init();
+  }
 
-    @Override
-    protected List<? extends MessagePoller> makePollers(Set<String> listenFor, int numThreads) {
-        List<RabbitMessageConsumer> list = new ArrayList<>();
+  @Override
+  protected List<? extends MessagePoller> makePollers(Set<String> listenFor, int numThreads) {
+    List<RabbitMessageConsumer> list = new ArrayList<>();
 
-        try {
-            Channel channel = channelPool.borrowObject();
+    try {
+      Channel channel = channelPool.borrowObject();
 
-            try {
-                for (String topic : listenFor) {
-                    channel.queueBind(serviceGroup, TOPIC_EXCHANGE, topic);
-                }
-
-                for (int i = 0; i < numThreads; i++) {
-                    list.add(new RabbitMessageConsumer(serviceGroup));
-                }
-
-            } catch (IOException ex) {
-                LOG.warn("problem creating consumers", ex);
-            }
-
-            channelPool.returnObject(channel);
-
-        } catch (Exception ex) {
-            LOG.warn("problem with the channelPool", ex);
+      try {
+        for (String topic : listenFor) {
+          channel.queueBind(serviceGroup, TOPIC_EXCHANGE, topic);
         }
 
-        return list;
+        for (int i = 0; i < numThreads; i++) {
+          list.add(new RabbitMessageConsumer(serviceGroup));
+        }
+
+      } catch (IOException ex) {
+        LOG.warn("problem creating consumers", ex);
+      }
+
+      channelPool.returnObject(channel);
+
+    } catch (Exception ex) {
+      LOG.warn("problem with the channelPool", ex);
     }
 
-    @Override
-    public void send(BinaryMessage message) throws Exception {
+    return list;
+  }
+
+  @Override
+  public void send(BinaryMessage message) throws Exception {
         //PERSISTENT_BASIC ensures that these messages will be persisted to disk, 
-        //which we need to ensure all events are processed at least once
-        try {
-            Channel channel = channelPool.borrowObject();
+    //which we need to ensure all events are processed at least once
+    try {
+      Channel channel = channelPool.borrowObject();
 
-            channel.basicPublish(TOPIC_EXCHANGE, message.getKey(),
-                    MessageProperties.PERSISTENT_BASIC, message.getPayload());
+      channel.basicPublish(TOPIC_EXCHANGE, message.getKey(),
+              MessageProperties.PERSISTENT_BASIC, message.getPayload());
 
-            channelPool.returnObject(channel);
+      channelPool.returnObject(channel);
 
-        } catch (Exception ex) {
-            LOG.warn("problem with the channelPool", ex);
-        }
+    } catch (Exception ex) {
+      LOG.warn("problem with the channelPool", ex);
+    }
+  }
+
+  private void init() throws IOException {
+    boolean durable = true;
+    boolean exclusive = false;
+    boolean autoDelete = false;
+
+    try {
+      Channel channel = channelPool.borrowObject();
+
+      channel.exchangeDeclare(TOPIC_EXCHANGE, "topic", durable);
+
+      channel.queueDeclare(serviceGroup, durable, exclusive, autoDelete, null);
+
+      channelPool.returnObject(channel);
+
+    } catch (Exception ex) {
+      LOG.warn("problem with the channelPool", ex);
     }
 
-    private void init() throws IOException {
-        boolean durable = true;
-        boolean exclusive = false;
-        boolean autoDelete = false;
+    //TODO: any other config settings here?
+  }
 
-        try {
-            Channel channel = channelPool.borrowObject();
+  @Override
+  public void shutdown() {
+    super.shutdown();
 
-            channel.exchangeDeclare(TOPIC_EXCHANGE, "topic", durable);
+    try {
+      channelPool.close();
+    } catch (Exception e) {
+    }
 
-            channel.queueDeclare(serviceGroup, durable, exclusive, autoDelete, null);
+    try {
+      conn.close();
+    } catch (Exception e) {
+    }
+  }
 
-            channelPool.returnObject(channel);
+  private class RabbitMessageConsumer extends MessagePoller {
 
-        } catch (Exception ex) {
-            LOG.warn("problem with the channelPool", ex);
-        }
+    private final String queue;
 
-        //TODO: any other config settings here?
+    public RabbitMessageConsumer(String queue) {
+      this.queue = queue;
     }
 
     @Override
-    public void shutdown() {
-        super.shutdown();
+    protected Optional<BinaryMessage> nextMessage() {
+      try {
+        Channel channel = channelPool.borrowObject();
 
         try {
-            channelPool.close();
-        } catch (Exception e) {
+          GetResponse gr = channel.basicGet(queue, true);
+          if (gr != null) {
+            String key = gr.getEnvelope().getRoutingKey();
+            byte[] payload = gr.getBody();
+
+            return Optional.of(new BinaryMessage(key, payload));
+
+          } else {
+            //TODO: is this ok? do we need this at all?
+            Utils.sleep(100, TimeUnit.MILLISECONDS);
+          }
+
+        } catch (IOException ex) {
+          LOG.warn("problem getting next message", ex);
+
+        } finally {
+          channelPool.returnObject(channel);
         }
 
-        try {
-            conn.close();
-        } catch (Exception e) {
-        }
+      } catch (Exception ex) {
+        LOG.warn("problem with the channelPool", ex);
+      }
+
+      return Optional.absent();
     }
-
-    private class RabbitMessageConsumer extends MessagePoller {
-
-        private final String queue;
-
-        public RabbitMessageConsumer(String queue) {
-            this.queue = queue;
-        }
-
-        @Override
-        protected Optional<BinaryMessage> nextMessage() {
-            try {
-                Channel channel = channelPool.borrowObject();
-
-                try {
-                    GetResponse gr = channel.basicGet(queue, true);
-                    if (gr != null) {
-                        String key = gr.getEnvelope().getRoutingKey();
-                        byte[] payload = gr.getBody();
-
-                        return Optional.of(new BinaryMessage(key, payload));
-
-                    } else {
-                        //TODO: is this ok? do we need this at all?
-                        Utils.sleep(100, TimeUnit.MILLISECONDS);
-                    }
-
-                } catch (IOException ex) {
-                    LOG.warn("problem getting next message", ex);
-                }
-
-                channelPool.returnObject(channel);
-
-            } catch (Exception ex) {
-                LOG.warn("problem with the channelPool", ex);
-            }
-
-            return Optional.absent();
-        }
-    }
+  }
 }
