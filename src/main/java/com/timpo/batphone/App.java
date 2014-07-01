@@ -1,153 +1,145 @@
 package com.timpo.batphone;
 
-import com.codahale.metrics.ConsoleReporter;
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
-import com.codahale.metrics.Timer.Context;
-import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import java.io.IOException;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.List;
-import java.util.Random;
-import java.util.SortedSet;
-import java.util.TreeSet;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.CopyOnWriteArrayList;
+import com.timpo.batphone.codecs.Codec;
+import com.timpo.batphone.codecs.impl.JSONCodec;
+import com.timpo.batphone.handlers.EventHandler;
+import com.timpo.batphone.handlers.Handler;
+import com.timpo.batphone.holders.BlockingQueueHolder;
+import com.timpo.batphone.holders.RoundRobinHolder;
+import com.timpo.batphone.messages.Event;
+import com.timpo.batphone.messages.Request;
+import com.timpo.batphone.messengers.Messenger;
+import com.timpo.batphone.messengers.MessengerImpl;
+import com.timpo.batphone.other.Utils;
+import com.timpo.batphone.transports.TopicMessage;
+import com.timpo.batphone.transports.Transport;
+import com.timpo.batphone.transports.rabbit.RabbitAddress;
+import com.timpo.batphone.transports.rabbit.RabbitPubSubTransport;
+import com.timpo.batphone.transports.redis.RedisDirectTransport;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import redis.clients.jedis.JedisPool;
 
 public class App {
 
-    final static Logger logger = LoggerFactory.getLogger(App.class);
+  static ExecutorService executorService = Executors.newCachedThreadPool();
 
-    public static void main(String[] args) throws IOException, InterruptedException, Exception {
-        
-        DateFormat autoDirFormat = new SimpleDateFormat("YYYY MM");
-        Date exifDate = new Date();
-        String format = autoDirFormat.format(exifDate);
-        System.out.println("format = " + format);
-        
-        System.exit(0);
-        
-        
-        int runs = 100;
+  static Messenger newMessenger(String serviceGroup) throws Exception {
+    String serviceID = serviceGroup + "." + Utils.simpleID();
 
-        Random random = new Random();
+    Codec codec = new JSONCodec();
+    int numThreads = 1;
 
-        int threadLimit = Runtime.getRuntime().availableProcessors() + 1;
+    RoundRobinHolder<JedisPool> holder = new BlockingQueueHolder<>(new JedisPool("localhost"));
 
-        ExecutorService es = Executors.newFixedThreadPool(threadLimit,
-                new ThreadFactoryBuilder().setDaemon(true).setPriority(Thread.MAX_PRIORITY - 2)
-                .setNameFormat("es").build());
+    Transport<TopicMessage<Request>> fakeTransport = new Transport<TopicMessage<Request>>() {
+      //<editor-fold defaultstate="collapsed" desc="generated">
+      @Override
+      public void listenFor(String topic) {
+      }
 
-        for (int sampleSize = 1; sampleSize <= 10000; sampleSize *= 10) {
-            MetricRegistry mr = new MetricRegistry();
+      @Override
+      public void onMessage(Handler<TopicMessage<Request>> handler) {
+      }
 
-            List<Integer> testValues = new ArrayList<>();
+      @Override
+      public void send(TopicMessage<Request> message) throws Exception {
+      }
 
-            int startAt = 0; //random.nextInt();
-            int endAt = startAt + sampleSize;
-            for (int i = startAt; i < endAt; i++) {
-                testValues.add(i);
-            }
+      @Override
+      public void start() {
+      }
 
-            ConsoleReporter reporter = ConsoleReporter.forRegistry(mr)
-                    .convertRatesTo(TimeUnit.SECONDS)
-                    .convertDurationsTo(TimeUnit.MILLISECONDS)
-                    .build();
+      @Override
+      public void stop() {
+      }
 
-            for (int i = 0; i < runs; i++) {
-                Collections.shuffle(testValues, random);
+      @Override
+      public void shutdown() {
+      }
+      //</editor-fold>
+    };
 
-                testConcurrentSkipListSet(testValues, mr.timer("ConcurrentSkipListSet"), es);
+    Transport<TopicMessage<Request>> requestTransport = new RedisDirectTransport(codec, numThreads, executorService, holder);
+    Transport<TopicMessage<Request>> responseTransport = new RedisDirectTransport(codec, numThreads, executorService, holder);
 
-                testSynchronizedTreeSet(testValues, mr.timer("SynchronizedTreeSet"), es);
+    Transport<TopicMessage<Event>> eventTransport = new RabbitPubSubTransport<>(codec, Event.class, numThreads, executorService, serviceGroup, new RabbitAddress());
 
-                testCopyOnWriteArrayList(testValues, mr.timer("CopyOnWriteArrayList"), es);
+    return new MessengerImpl(serviceID, serviceGroup,
+//            requestTransport,
+//            responseTransport,
+            fakeTransport,
+            fakeTransport,
+            eventTransport,
+            executorService);
+  }
 
-                testSynchronizedList(testValues, mr.timer("SynchronizedList"), es);
-            }
+  public static void main(String[] args) throws Exception {
+    final AtomicInteger pingCounter = new AtomicInteger(0);
+    final AtomicInteger pongCounter = new AtomicInteger(0);
 
-            System.out.println("startAt=" + startAt + " samples=" + sampleSize);
-            reporter.report();
-            System.out.println("\n\n");
+    final String pingService = "pinger";
+    String pongService = "ponger";
+
+    Messenger pingMessenger = newMessenger(pingService);
+    final Messenger pongMessenger = newMessenger(pongService);
+
+    pongMessenger.onEvent(new EventHandler() {
+      @Override
+      public void handle(Event event, String topic) {
+        System.out.println("ping " + pingCounter.incrementAndGet());
+//        System.out.println("event = " + event);
+        Map<String, Object> response = new HashMap<>();
+        response.put("pong", System.currentTimeMillis());
+
+        try {
+          pongMessenger.notify(response, pingService);
+
+        } catch (Exception ex) {
+          Logger.getLogger(App.class.getName()).log(Level.SEVERE, null, ex);
         }
+      }
+    }, pongService);
 
-        es.shutdown();
-        es.awaitTermination(5, TimeUnit.SECONDS);
+    pingMessenger.onEvent(new EventHandler() {
+      @Override
+      public void handle(Event event, String topic) {
+        System.out.println("pong " + pongCounter.incrementAndGet());
+//        System.out.println("event = " + event);
+      }
+    }, pingService);
+
+    pingMessenger.start();
+    pongMessenger.start();
+
+    Utils.sleep(10, TimeUnit.MILLISECONDS);
+
+    for (int i = 0; i < 100; i++) {
+      Map<String, Object> event = new HashMap<>();
+      event.put("ping", System.currentTimeMillis());
+
+      pingMessenger.notify(event, pongService);
     }
 
-    private static void testConcurrentSkipListSet(List<Integer> testValues, Timer timer, ExecutorService es) throws InterruptedException {
-        final SortedSet<Integer> set = new ConcurrentSkipListSet<>();
+    Utils.sleep(1, TimeUnit.SECONDS);
+    
+    pingMessenger.shutdown();
+    pongMessenger.shutdown();
+    executorService.shutdownNow();
 
-        List<Callable<Void>> tasks = prepareTasks(testValues, set);
-
-        Context timerContext = timer.time();
-        es.invokeAll(tasks);
-        Lists.newArrayList(set);
-        timerContext.stop();
-    }
-
-    private static void testSynchronizedTreeSet(List<Integer> testValues, Timer timer, ExecutorService es) throws InterruptedException {
-        final SortedSet<Integer> set = Collections.synchronizedSortedSet(new TreeSet<Integer>());
-
-        List<Callable<Void>> tasks = prepareTasks(testValues, set);
-
-        Context timerContext = timer.time();
-        es.invokeAll(tasks);
-        Lists.newArrayList(set);
-        timerContext.stop();
-    }
-
-    private static void testCopyOnWriteArrayList(List<Integer> testValues, Timer timer, ExecutorService es) throws InterruptedException {
-        final List<Integer> list = new CopyOnWriteArrayList<>();
-
-        List<Callable<Void>> tasks = prepareTasks(testValues, list);
-
-        Context timerContext = timer.time();
-        es.invokeAll(tasks);
-        List<Integer> list2 = Lists.newArrayList(list);
-        Collections.sort(list2);
-        timerContext.stop();
-    }
-
-    private static void testSynchronizedList(List<Integer> testValues, Timer timer, ExecutorService es) throws InterruptedException {
-        final List<Integer> list = Collections.synchronizedList(new ArrayList<Integer>());
-
-        List<Callable<Void>> tasks = prepareTasks(testValues, list);
-
-        Context timerContext = timer.time();
-        es.invokeAll(tasks);
-        Collections.sort(list);
-        timerContext.stop();
-    }
-
-    private static List<Callable<Void>> prepareTasks(List<Integer> testValues, final Collection<Integer> col) {
-        List<Callable<Void>> tasks = new ArrayList<>();
-        for (final Integer integer : testValues) {
-            tasks.add(new Callable<Void>() {
-                @Override
-                public Void call() throws Exception {
-                    col.add(integer);
-
-                    for (int i = 0; i < integer; i++) {
-                        
-                    }
-                    
-                    return null;
-                }
-            });
-        }
-        return tasks;
-    }
+//    ThreadInfo[] threads = ManagementFactory.getThreadMXBean()
+//            .dumpAllThreads(true, true);
+//
+//    for (final ThreadInfo info : threads) {
+//      System.out.println(info.getThreadName());
+//    }
+  }
 }
