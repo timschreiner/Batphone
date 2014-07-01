@@ -73,9 +73,10 @@ public class RabbitPubSubTransport<M extends Message> extends PollingTransport<M
 
       } catch (IOException ex) {
         LOG.warn("problem creating consumers", ex);
-      }
 
-      channelPool.returnObject(channel);
+      } finally {
+        channelPool.returnObject(channel);
+      }
 
     } catch (Exception ex) {
       LOG.warn("problem with the channelPool", ex);
@@ -86,18 +87,19 @@ public class RabbitPubSubTransport<M extends Message> extends PollingTransport<M
 
   @Override
   public void send(BinaryMessage message) throws Exception {
-        //PERSISTENT_BASIC ensures that these messages will be persisted to disk, 
+    //PERSISTENT_BASIC ensures that these messages will be persisted to disk, 
     //which we need to ensure all events are processed at least once
-    try {
-      Channel channel = channelPool.borrowObject();
 
+    Channel channel = channelPool.borrowObject();
+    try {
       channel.basicPublish(TOPIC_EXCHANGE, message.getKey(),
               MessageProperties.PERSISTENT_BASIC, message.getPayload());
 
-      channelPool.returnObject(channel);
-
     } catch (Exception ex) {
       LOG.warn("problem with the channelPool", ex);
+
+    } finally {
+      channelPool.returnObject(channel);
     }
   }
 
@@ -108,12 +110,13 @@ public class RabbitPubSubTransport<M extends Message> extends PollingTransport<M
 
     try {
       Channel channel = channelPool.borrowObject();
-
-      channel.exchangeDeclare(TOPIC_EXCHANGE, "topic", durable);
-
-      channel.queueDeclare(serviceGroup, durable, exclusive, autoDelete, null);
-
-      channelPool.returnObject(channel);
+      try {
+        channel.exchangeDeclare(TOPIC_EXCHANGE, "topic", durable);
+        channel.queueDeclare(serviceGroup, durable, exclusive, autoDelete, null);
+      
+      } finally {
+        channelPool.returnObject(channel);
+      }
 
     } catch (Exception ex) {
       LOG.warn("problem with the channelPool", ex);
